@@ -1,0 +1,42 @@
+# Gradle
+.gradle/
+build/
+**/build/
+!gradle-wrapper.jar
+local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/launch.json
+
+# Android
+*.apk
+*.aab
+*.dex
+captures/
+
+# NDK / CMake
+.cxx/
+.externalNativeBuild/
+
+# Kotlin
+*.kotlin_module
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models — NEVER commit
+*.gguf
+*.bin
+*.safetensors
+app/src/main/assets/models/
+core/engine/llamacpp/src/androidTest/assets/*.gguf
+
+# Coverage / reports
+build/reports/
+**/build/reports/
+
+# llama.cpp build artifacts inside submodule
+third_party/llama.cpp/build/
