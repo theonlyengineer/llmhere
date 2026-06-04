@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:name=".EdgeLlmApplication"
+        android:label="EdgeLLM"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <!-- Grant the app's native namespace access to the device's Adreno
+             OpenCL driver (/vendor/lib64/libOpenCL.so, exposed via the vendor
+             public.libraries.txt). libggml-opencl.so links against it; without
+             this declaration the loader cannot resolve it. required=false so
+             devices without OpenCL still install. Requires API 30+. -->
+        <uses-native-library
+            android:name="libOpenCL.so"
+            android:required="false" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
