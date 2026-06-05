@@ -137,6 +137,36 @@ class LlamaCppEngineTest {
     }
 
     @Test
+    fun `generate stops when output degenerates into a repeating phrase`() = runTest {
+        // Real answer, then the model loops "the number of " forever (no stop token).
+        val loop = buildList {
+            addAll(listOf("The", " answer", " is", " the", " number", " of"))
+            repeat(40) { addAll(listOf(" the", " number", " of")) } // degenerate loop
+        }
+        val engine = createEngine(tokens = loop)
+        engine.load(dummyModel)
+
+        val tokens = engine.generate("prompt", GenerationConfig(maxTokens = 200)).toList()
+
+        // Should bail out of the loop well before consuming all ~126 tokens.
+        assertTrue(
+            tokens.size < 30,
+            "Expected generation to stop early on repetition, but emitted ${tokens.size} tokens",
+        )
+        assertTrue(tokens.last().isFinal)
+    }
+
+    @Test
+    fun `generate does not stop on normal varied text`() = runTest {
+        val sentence = "The quick brown fox jumps over the lazy dog and then runs away quickly"
+            .split(" ").map { " $it" }
+        val engine = createEngine(tokens = sentence)
+        engine.load(dummyModel)
+        val tokens = engine.generate("prompt", GenerationConfig()).toList()
+        assertEquals(sentence.size, tokens.size, "Varied text must not trip the repetition guard")
+    }
+
+    @Test
     fun `capabilities reflect llama cpp support`() {
         val engine = createEngine()
         assertTrue(engine.capabilities.supportedFamilies.isNotEmpty())

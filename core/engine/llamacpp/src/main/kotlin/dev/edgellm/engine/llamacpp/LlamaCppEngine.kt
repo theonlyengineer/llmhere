@@ -93,21 +93,59 @@ class LlamaCppEngine(
         )
 
         val stopTokenSet = config.stopTokens.toSet()
+        val output = StringBuilder()
 
         // "One-behind" pattern: hold the current token, peek the next to determine isFinal.
         // Stop tokens are not emitted; the token immediately before a stop token gets isFinal=true.
+        // A repetition guard stops generation when the tail degenerates into a repeating
+        // phrase — a common failure mode of small models once they run out of things to say.
         var current = bindings.nextToken(modelHandle)
         while (current != null) {
             if (current in stopTokenSet) break
-            val next = bindings.nextToken(modelHandle)
+            output.append(current)
+            val repeating = isDegenerateRepetition(output)
+            val next = if (repeating) null else bindings.nextToken(modelHandle)
             val isFinal = next == null || next in stopTokenSet
             emit(Token(text = current, isFinal = isFinal))
-            if (isFinal) break
+            if (isFinal) {
+                if (repeating) bindings.cancelGeneration(modelHandle)
+                break
+            }
             current = next
         }
 
         _state.value = EngineState.Ready
     }.flowOn(inferenceDispatcher)
+
+    /**
+     * Returns true when the end of [text] is a short phrase (1–6 words) repeated
+     * [REPEAT_THRESHOLD]+ times back-to-back, e.g. "the number of the number of …".
+     */
+    private fun isDegenerateRepetition(text: CharSequence): Boolean {
+        val words = text.split(WHITESPACE).filter { it.isNotEmpty() }
+        if (words.size < MIN_WORDS) return false
+        for (cycle in 1..MAX_CYCLE_WORDS) {
+            val needed = cycle * REPEAT_THRESHOLD
+            if (words.size < needed) continue
+            val tail = words.subList(words.size - needed, words.size)
+            val unit = tail.subList(tail.size - cycle, tail.size)
+            var repeats = 0
+            var i = tail.size
+            while (i - cycle >= 0 && tail.subList(i - cycle, i) == unit) {
+                repeats++
+                i -= cycle
+            }
+            if (repeats >= REPEAT_THRESHOLD) return true
+        }
+        return false
+    }
+
+    private companion object {
+        val WHITESPACE = Regex("\\s+")
+        const val MIN_WORDS = 8
+        const val MAX_CYCLE_WORDS = 6
+        const val REPEAT_THRESHOLD = 4
+    }
 
     override fun cancel() {
         if (modelHandle != 0L) {
