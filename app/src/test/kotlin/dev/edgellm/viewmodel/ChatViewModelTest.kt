@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -196,5 +197,25 @@ class ChatViewModelTest {
         vm.loadModel(descriptor, "/tmp/models/falcon.gguf")
         // Should not throw
         vm.cancelGeneration()
+    }
+
+    @Test
+    fun `prompt includes system prompt after load`() = runTest(UnconfinedTestDispatcher()) {
+        val (vm, engine, _) = createViewModel(this, emits = listOf("ok"))
+        vm.loadModel(descriptor, "/tmp/models/falcon.gguf")
+        // Wait for Ready state before sending
+        vm.uiState.test {
+            awaitItem() // consume Ready
+            vm.sendMessage("hi")
+            // Wait until generation is done (isGenerating goes false)
+            while (true) {
+                val s = awaitItem()
+                if (s is ChatUiState.Ready && !s.isGenerating) break
+            }
+        }
+        assertTrue(
+            engine.lastPrompt.contains("helpful assistant"),
+            "Prompt should contain system prompt but was:\n${engine.lastPrompt}",
+        )
     }
 }

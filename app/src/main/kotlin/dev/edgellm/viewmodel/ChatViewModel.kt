@@ -145,7 +145,7 @@ class ChatViewModel(
             promptBuilder = promptBuilder,
             engine = engine,
             family = descriptor.family,
-            systemPrompt = null,
+            systemPrompt = "You are a helpful assistant. Answer questions clearly and concisely.",
             contextLength = descriptor.contextLength,
             stopTokens = descriptor.stopTokens,
         )

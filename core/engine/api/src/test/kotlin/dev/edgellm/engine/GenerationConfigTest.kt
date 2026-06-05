@@ -9,11 +9,11 @@ class GenerationConfigTest {
     @Test
     fun `default values`() {
         val config = GenerationConfig()
-        assertEquals(512, config.maxTokens)
-        assertEquals(0.7f, config.temperature)
+        assertEquals(80, config.maxTokens)
+        assertEquals(0.3f, config.temperature)
         assertEquals(0.9f, config.topP)
         assertEquals(40, config.topK)
-        assertEquals(1.1f, config.repeatPenalty)
+        assertEquals(1.3f, config.repeatPenalty)
         assertTrue(config.stopTokens.isEmpty())
     }
 

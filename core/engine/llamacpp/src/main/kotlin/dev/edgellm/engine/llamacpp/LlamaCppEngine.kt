@@ -92,12 +92,17 @@ class LlamaCppEngine(
             repeatPenalty = config.repeatPenalty,
         )
 
-        // "One-behind" pattern: hold the current token, peek the next to determine isFinal
+        val stopTokenSet = config.stopTokens.toSet()
+
+        // "One-behind" pattern: hold the current token, peek the next to determine isFinal.
+        // Stop tokens are not emitted; the token immediately before a stop token gets isFinal=true.
         var current = bindings.nextToken(modelHandle)
         while (current != null) {
+            if (current in stopTokenSet) break
             val next = bindings.nextToken(modelHandle)
-            val isFinal = next == null
+            val isFinal = next == null || next in stopTokenSet
             emit(Token(text = current, isFinal = isFinal))
+            if (isFinal) break
             current = next
         }
 

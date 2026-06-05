@@ -132,6 +132,54 @@ class ChatSessionManagerTest {
     }
 
     @Test
+    fun `prompt contains only the current message — no prior history`() = runTest {
+        val (manager, engine) = createManager(emits = listOf("ok"))
+        engine.load(ModelHandle(File("/fake.gguf"), "falcon-e", "i2_s", 2048), LoadConfig())
+        manager.newSession("model")
+
+        // Send first message about medicine
+        engine.emits = listOf("Modern medicine is a field...")
+        manager.sendMessage("tell me about modern medicine")
+
+        // Second message about a completely different topic
+        engine.emits = listOf("ok")
+        manager.sendMessage("what is flutter?")
+
+        val prompt = engine.lastPrompt
+        // Prior conversation should NOT be in the prompt
+        assert(!prompt.contains("modern medicine")) {
+            "Prior turn should not be in prompt, but prompt was:\n$prompt"
+        }
+        assert(prompt.contains("flutter")) {
+            "Current question must be in prompt"
+        }
+    }
+
+    @Test
+    fun `prompt includes at most last 2 turns when history is long`() = runTest {
+        val (manager, engine) = createManager(emits = listOf("ok"))
+        engine.load(ModelHandle(File("/fake.gguf"), "falcon-e", "i2_s", 2048), LoadConfig())
+        manager.newSession("model")
+
+        // Send 4 turns so history has 8 messages before the 5th question
+        repeat(4) { i ->
+            engine.emits = listOf("answer$i")
+            manager.sendMessage("question$i")
+        }
+
+        // 5th question — prompt should only contain last 2 user/assistant pairs + current
+        engine.emits = listOf("answer4")
+        manager.sendMessage("question4")
+
+        val prompt = engine.lastPrompt
+        // "question0" and "question1" should not appear (older than last 2 pairs)
+        assert(!prompt.contains("question0")) { "Old history should be trimmed from prompt" }
+        assert(!prompt.contains("question1")) { "Old history should be trimmed from prompt" }
+        // "question4" (current) must appear
+        assert(prompt.contains("question4")) { "Current question must be in prompt" }
+    }
+
+    @Test
     fun `get sessions returns flow`() = runTest {
         val (manager, engine) = createManager()
         engine.load(

@@ -1,15 +1,15 @@
 [
   {
-    "id": "qwen2.5-0.5b-instruct-q4_0",
+    "id": "falcon-e-1b-instruct",
     "family": "falcon-e",
-    "display_name": "Qwen 2.5 0.5B Instruct",
-    "url": "https://huggingface.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/Qwen2.5-0.5B-Instruct-Q4_0.gguf",
-    "sha256": "",
-    "size_bytes": 370041472,
-    "quantization": "Q4_0",
+    "display_name": "Falcon-E 1B Instruct (Q4_K_M)",
+    "url": "http://127.0.0.1:8080/falcon-e-1b-instruct.gguf",
+    "sha256": "065083f38d704867793660cc52407546410262adf14cc5e2bbd8ffcb530d4f05",
+    "size_bytes": 1046280160,
+    "quantization": "Q4_K_M",
     "context_length": 2048,
-    "min_ram_mb": 512,
-    "recommended_ram_mb": 1024,
+    "min_ram_mb": 1024,
+    "recommended_ram_mb": 2048,
     "chat_template": "falcon-e",
     "stop_tokens": ["<|im_end|>"],
     "engine": "llamacpp"

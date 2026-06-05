@@ -105,6 +105,38 @@ class LlamaCppEngineTest {
     }
 
     @Test
+    fun `generate stops at stop token`() = runTest {
+        val engine = createEngine(tokens = listOf("Hello", "<|im_end|>", "should", "not", "appear"))
+        engine.load(dummyModel)
+        val tokens = engine.generate(
+            "prompt",
+            GenerationConfig(stopTokens = listOf("<|im_end|>")),
+        ).toList()
+        assertEquals(1, tokens.size)
+        assertEquals("Hello", tokens[0].text)
+        assertTrue(tokens[0].isFinal)
+    }
+
+    @Test
+    fun `generate stop token itself is not emitted`() = runTest {
+        val engine = createEngine(tokens = listOf("<|im_end|>", "extra"))
+        engine.load(dummyModel)
+        val tokens = engine.generate(
+            "prompt",
+            GenerationConfig(stopTokens = listOf("<|im_end|>")),
+        ).toList()
+        assertTrue(tokens.isEmpty())
+    }
+
+    @Test
+    fun `generate with no stop tokens emits all tokens`() = runTest {
+        val engine = createEngine(tokens = listOf("a", "<|im_end|>", "b"))
+        engine.load(dummyModel)
+        val tokens = engine.generate("prompt", GenerationConfig(stopTokens = emptyList())).toList()
+        assertEquals(3, tokens.size)
+    }
+
+    @Test
     fun `capabilities reflect llama cpp support`() {
         val engine = createEngine()
         assertTrue(engine.capabilities.supportedFamilies.isNotEmpty())

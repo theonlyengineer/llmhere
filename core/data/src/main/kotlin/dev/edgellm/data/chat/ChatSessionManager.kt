@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.onEach
 
+private const val MAX_HISTORY_TURNS = 0
+
 class ChatSessionManager(
     private val chatRepository: ChatRepository,
     private val promptBuilder: PromptBuilder,
@@ -51,10 +53,12 @@ class ChatSessionManager(
         val updatedSession = chatRepository.getSession(session.id) ?: return
         _currentSession.value = updatedSession
 
-        // Build prompt
+        // Build prompt — limit to last MAX_HISTORY_TURNS to prevent context pollution
+        // from accumulated bad responses in long conversations.
+        val recentMessages = updatedSession.messages.takeLast(MAX_HISTORY_TURNS * 2 + 1)
         val prompt = promptBuilder.build(
             family = family,
-            messages = updatedSession.messages,
+            messages = recentMessages,
             systemPrompt = systemPrompt,
             contextLength = contextLength,
         )

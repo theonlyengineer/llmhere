@@ -19,6 +19,9 @@ class FakeInferenceEngine(
     private val _state = MutableStateFlow<EngineState>(EngineState.Idle)
     override val state: StateFlow<EngineState> = _state
 
+    var lastPrompt: String = ""
+        private set
+
     @Volatile
     private var cancelled = false
 
@@ -36,6 +39,7 @@ class FakeInferenceEngine(
     }
 
     override fun generate(prompt: String, config: GenerationConfig): Flow<Token> = flow {
+        lastPrompt = prompt
         _state.value = EngineState.Generating
         cancelled = false
         val tokens = emits.toList()
