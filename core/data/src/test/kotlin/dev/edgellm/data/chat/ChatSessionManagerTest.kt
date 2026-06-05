@@ -132,48 +132,48 @@ class ChatSessionManagerTest {
     }
 
     @Test
-    fun `prompt includes prior turns so follow-ups have context`() = runTest {
+    fun `continuation message keeps prior context`() = runTest {
         val (manager, engine) = createManager(emits = listOf("ok"))
         engine.load(ModelHandle(File("/fake.gguf"), "falcon-e", "i2_s", 2048), LoadConfig())
         manager.newSession("model")
         manager.historyTurns = 3
 
-        engine.emits = listOf("Paris is the capital of France.")
-        manager.sendMessage("what is the capital of France?")
+        engine.emits = listOf("India is a country in South Asia.")
+        manager.sendMessage("tell me about India")
 
         engine.emits = listOf("ok")
         manager.sendMessage("continue")
 
         val prompt = engine.lastPrompt
-        // The prior turn must be present so "continue" has something to continue.
-        assert(prompt.contains("capital of France")) {
-            "Prior turn should be in prompt for follow-ups, but prompt was:\n$prompt"
+        assert(prompt.contains("India")) {
+            "A continuation must keep prior context, but prompt was:\n$prompt"
         }
         assert(prompt.contains("continue")) { "Current message must be in prompt" }
     }
 
     @Test
-    fun `historyTurns zero sends only the current message`() = runTest {
+    fun `new topic question ignores prior context`() = runTest {
         val (manager, engine) = createManager(emits = listOf("ok"))
         engine.load(ModelHandle(File("/fake.gguf"), "falcon-e", "i2_s", 2048), LoadConfig())
         manager.newSession("model")
-        manager.historyTurns = 0
+        manager.historyTurns = 3
 
-        engine.emits = listOf("Modern medicine is a field...")
-        manager.sendMessage("tell me about modern medicine")
+        engine.emits = listOf("India is a country in South Asia.")
+        manager.sendMessage("tell me about India")
 
+        // A brand-new question should NOT drag in the India context.
         engine.emits = listOf("ok")
-        manager.sendMessage("what is flutter?")
+        manager.sendMessage("how to make a tea?")
 
         val prompt = engine.lastPrompt
-        assert(!prompt.contains("modern medicine")) {
-            "With historyTurns=0, prior turn should not be in prompt, but was:\n$prompt"
+        assert(!prompt.contains("India")) {
+            "A new question must start fresh, but prompt still had India:\n$prompt"
         }
-        assert(prompt.contains("flutter")) { "Current question must be in prompt" }
+        assert(prompt.contains("tea")) { "Current question must be in prompt" }
     }
 
     @Test
-    fun `history is trimmed to the configured number of turns`() = runTest {
+    fun `continuation history is trimmed to the configured number of turns`() = runTest {
         val (manager, engine) = createManager(emits = listOf("ok"))
         engine.load(ModelHandle(File("/fake.gguf"), "falcon-e", "i2_s", 2048), LoadConfig())
         manager.newSession("model")
@@ -183,14 +183,14 @@ class ChatSessionManagerTest {
             engine.emits = listOf("answer$i")
             manager.sendMessage("question$i")
         }
-        engine.emits = listOf("answer4")
-        manager.sendMessage("question4")
+        // A continuation pulls in history, trimmed to the last 2 turns.
+        engine.emits = listOf("final")
+        manager.sendMessage("continue")
 
         val prompt = engine.lastPrompt
-        // Only the last 2 pairs + current should remain.
         assert(!prompt.contains("question0")) { "Old history should be trimmed" }
         assert(!prompt.contains("question1")) { "Old history should be trimmed" }
-        assert(prompt.contains("question4")) { "Current question must be in prompt" }
+        assert(prompt.contains("question3")) { "Recent history should be kept" }
     }
 
     @Test

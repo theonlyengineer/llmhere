@@ -60,10 +60,11 @@ class ChatSessionManager(
         val updatedSession = chatRepository.getSession(session.id) ?: return
         _currentSession.value = updatedSession
 
-        // Build prompt — include the last [historyTurns] user/assistant pairs plus the
-        // current message so follow-ups ("continue", "and then?") have context, while
-        // capping history to avoid context pollution on small models.
-        val recentMessages = updatedSession.messages.takeLast(historyTurns * 2 + 1)
+        // Context-aware history: a continuation ("continue", "go on", "more") keeps the
+        // prior turns so the model can carry on; a brand-new question starts fresh so a
+        // small model isn't dragged back to the previous topic.
+        val turns = if (isContinuation(content)) historyTurns else 0
+        val recentMessages = updatedSession.messages.takeLast(turns * 2 + 1)
         val prompt = promptBuilder.build(
             family = family,
             messages = recentMessages,
@@ -87,6 +88,17 @@ class ChatSessionManager(
         _currentSession.value = chatRepository.getSession(session.id)
     }
 
+    /**
+     * True when [message] is a short follow-up that should continue the previous
+     * exchange (e.g. "continue", "go on", "tell me more") rather than start a new topic.
+     */
+    private fun isContinuation(message: String): Boolean {
+        val normalized = message.trim().lowercase().trimEnd('.', '!', '?', ',', ' ')
+        if (normalized.isEmpty()) return false
+        if (normalized.split(WHITESPACE).size > MAX_CONTINUATION_WORDS) return false
+        return CONTINUATION_PHRASES.any { normalized == it || normalized.startsWith("$it ") }
+    }
+
     fun cancelGeneration() {
         engine.cancel()
     }
@@ -96,5 +108,15 @@ class ChatSessionManager(
         if (_currentSession.value?.id == sessionId) {
             _currentSession.value = null
         }
+    }
+
+    private companion object {
+        val WHITESPACE = Regex("\\s+")
+        const val MAX_CONTINUATION_WORDS = 4
+        val CONTINUATION_PHRASES = listOf(
+            "continue", "go on", "keep going", "carry on", "go ahead", "proceed",
+            "more", "tell me more", "say more", "and then", "then", "next",
+            "elaborate", "explain more", "what else", "anything else", "and", "go on please",
+        )
     }
 }
