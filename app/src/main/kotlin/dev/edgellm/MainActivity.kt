@@ -95,7 +95,6 @@ class MainActivity : ComponentActivity() {
                                 navController.navigate(Screen.Chat.route)
                             },
                             onChat = { navController.navigate(Screen.Chat.route) },
-                            onOpenSettings = { navController.navigate(Screen.Settings.route) },
                         )
                     }
                     composable(Screen.Chat.route) {
@@ -117,6 +116,12 @@ class MainActivity : ComponentActivity() {
                             onNewChat = { viewModel.newChat() },
                             onOpenSession = { viewModel.openSession(it) },
                             onDeleteSession = { viewModel.deleteSession(it) },
+                            onBackToHome = {
+                                navController.navigate(Screen.Home.route) {
+                                    popUpTo(Screen.Home.route) { inclusive = false }
+                                    launchSingleTop = true
+                                }
+                            },
                         )
                     }
                     composable(Screen.Settings.route) {

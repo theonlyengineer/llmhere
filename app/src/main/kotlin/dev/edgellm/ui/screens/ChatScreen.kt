@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
@@ -99,6 +100,7 @@ fun ChatScreen(
     onNewChat: () -> Unit,
     onOpenSession: (String) -> Unit,
     onDeleteSession: (String) -> Unit,
+    onBackToHome: () -> Unit,
 ) {
     var showModelSelector by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -129,8 +131,11 @@ fun ChatScreen(
             topBar = {
                 TopAppBar(
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.History, contentDescription = "Chat history")
+                        IconButton(onClick = onBackToHome) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back to home",
+                            )
                         }
                     },
                     title = {
@@ -140,6 +145,9 @@ fun ChatScreen(
                         )
                     },
                     actions = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Default.History, contentDescription = "Chat history")
+                        }
                         IconButton(onClick = onOpenSettings) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
