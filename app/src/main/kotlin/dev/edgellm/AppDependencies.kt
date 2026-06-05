@@ -1,7 +1,6 @@
 package dev.edgellm
 
 import dev.edgellm.data.chat.ChatRepository
-import dev.edgellm.data.chat.InMemoryChatRepository
 import dev.edgellm.data.download.ModelDownloader
 import dev.edgellm.data.download.OkHttpModelDownloader
 import dev.edgellm.data.model.InMemoryInstalledModelRepository
@@ -19,10 +18,10 @@ class AppDependencies(
     val engine: InferenceEngine,
     val modelsDir: String,
     val settingsRepository: GenerationSettingsRepository,
+    val chatRepository: ChatRepository,
 ) {
     val chatTemplateRegistry = ChatTemplateRegistry()
     val promptBuilder = PromptBuilder(chatTemplateRegistry)
-    val chatRepository: ChatRepository = InMemoryChatRepository()
     val installedModelRepository: InstalledModelRepository = InMemoryInstalledModelRepository()
     val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)

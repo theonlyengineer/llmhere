@@ -60,8 +60,10 @@ class MainActivity : ComponentActivity() {
                 val uiState by viewModel.uiState.collectAsState()
                 val assistantMessage by viewModel.assistantMessage.collectAsState()
                 val currentModel by viewModel.currentDescriptor.collectAsState()
+                val currentSessionId by viewModel.currentSessionId.collectAsState()
                 val installedModels by deps.installedModelRepository.getInstalledModels()
                     .collectAsState(initial = emptyList())
+                val sessions by viewModel.sessions().collectAsState(initial = emptyList())
                 val settings by settingsFlow.collectAsState()
 
                 val defaultModel = deps.catalogModels.firstOrNull()
@@ -75,6 +77,8 @@ class MainActivity : ComponentActivity() {
                             currentModel = currentModel,
                             catalogModels = deps.catalogModels,
                             downloadedModelIds = downloadedIds,
+                            sessions = sessions,
+                            currentSessionId = currentSessionId,
                             onDownloadClick = { defaultModel?.let { viewModel.downloadModel(it) } },
                             onSendMessage = { viewModel.sendMessage(it) },
                             onCancelGeneration = { viewModel.cancelGeneration() },
@@ -82,6 +86,9 @@ class MainActivity : ComponentActivity() {
                             onSelectModel = { viewModel.switchModel(it) },
                             onRestartModel = { viewModel.restartModel() },
                             onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                            onNewChat = { viewModel.newChat() },
+                            onOpenSession = { viewModel.openSession(it) },
+                            onDeleteSession = { viewModel.deleteSession(it) },
                         )
                     }
                     composable(Screen.Settings.route) {

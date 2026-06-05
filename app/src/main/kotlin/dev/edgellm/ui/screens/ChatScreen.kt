@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Refresh
@@ -39,8 +40,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -49,6 +53,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,8 +68,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.edgellm.domain.chat.ChatMessage
+import dev.edgellm.domain.chat.ChatSession
 import dev.edgellm.domain.chat.Role
 import dev.edgellm.domain.model.ModelDescriptor
+import dev.edgellm.ui.components.ChatHistoryDrawer
 import dev.edgellm.ui.components.MarkdownMessageBubble
 import dev.edgellm.ui.components.MessageBubbleShape
 import dev.edgellm.ui.components.ModelSelectorBottomSheet
@@ -80,6 +87,8 @@ fun ChatScreen(
     currentModel: ModelDescriptor?,
     catalogModels: List<ModelDescriptor>,
     downloadedModelIds: Set<String>,
+    sessions: List<ChatSession>,
+    currentSessionId: String?,
     onDownloadClick: () -> Unit,
     onSendMessage: (String) -> Unit,
     onCancelGeneration: () -> Unit,
@@ -87,53 +96,83 @@ fun ChatScreen(
     onSelectModel: (ModelDescriptor) -> Unit,
     onRestartModel: () -> Unit,
     onOpenSettings: () -> Unit,
+    onNewChat: () -> Unit,
+    onOpenSession: (String) -> Unit,
+    onDeleteSession: (String) -> Unit,
 ) {
     var showModelSelector by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    ModelChip(
-                        modelName = currentModel?.displayName ?: "EdgeLLM",
-                        onClick = { showModelSelector = true },
-                    )
-                },
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-            )
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                ChatHistoryDrawer(
+                    sessions = sessions,
+                    currentSessionId = currentSessionId,
+                    onNewChat = {
+                        onNewChat()
+                        scope.launch { drawerState.close() }
+                    },
+                    onOpenSession = {
+                        onOpenSession(it)
+                        scope.launch { drawerState.close() }
+                    },
+                    onDeleteSession = onDeleteSession,
+                )
+            }
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-        ) {
-            when (uiState) {
-                is ChatUiState.NoModel -> NoModelContent(onDownloadClick)
-                is ChatUiState.Downloading -> DownloadingContent(uiState)
-                is ChatUiState.LoadingModel -> LoadingModelContent()
-                is ChatUiState.Ready -> ReadyContent(
-                    uiState = uiState,
-                    assistantMessage = assistantMessage,
-                    onSendMessage = onSendMessage,
-                    onCancelGeneration = onCancelGeneration,
-                    onImageClick = {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Image support coming soon")
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Default.History, contentDescription = "Chat history")
                         }
                     },
+                    title = {
+                        ModelChip(
+                            modelName = currentModel?.displayName ?: "EdgeLLM",
+                            onClick = { showModelSelector = true },
+                        )
+                    },
+                    actions = {
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
                 )
-                is ChatUiState.Error -> ErrorContent(uiState, onRetry)
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+            ) {
+                when (uiState) {
+                    is ChatUiState.NoModel -> NoModelContent(onDownloadClick)
+                    is ChatUiState.Downloading -> DownloadingContent(uiState)
+                    is ChatUiState.LoadingModel -> LoadingModelContent()
+                    is ChatUiState.Ready -> ReadyContent(
+                        uiState = uiState,
+                        assistantMessage = assistantMessage,
+                        onSendMessage = onSendMessage,
+                        onCancelGeneration = onCancelGeneration,
+                        onImageClick = {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Image support coming soon")
+                            }
+                        },
+                    )
+                    is ChatUiState.Error -> ErrorContent(uiState, onRetry)
+                }
             }
         }
     }

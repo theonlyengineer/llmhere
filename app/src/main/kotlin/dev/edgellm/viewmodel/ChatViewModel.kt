@@ -6,18 +6,22 @@ import dev.edgellm.data.download.DownloadProgress
 import dev.edgellm.data.download.ModelDownloader
 import dev.edgellm.data.model.InstalledModelRepository
 import dev.edgellm.domain.chat.ChatMessage
+import dev.edgellm.domain.chat.ChatSession
 import dev.edgellm.domain.chat.PromptBuilder
 import dev.edgellm.domain.model.ModelDescriptor
 import dev.edgellm.engine.GenerationConfig
 import dev.edgellm.engine.InferenceEngine
 import dev.edgellm.engine.LoadConfig
 import dev.edgellm.engine.ModelHandle
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,6 +51,7 @@ class ChatViewModel(
     private val modelsDir: String,
     private val scope: CoroutineScope,
     private val logger: (String) -> Unit = {},
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
     private val _uiState = MutableStateFlow<ChatUiState>(ChatUiState.NoModel)
@@ -57,6 +62,12 @@ class ChatViewModel(
 
     private val _currentDescriptor = MutableStateFlow<ModelDescriptor?>(null)
     val currentDescriptor: StateFlow<ModelDescriptor?> = _currentDescriptor
+
+    private val _currentSessionId = MutableStateFlow<String?>(null)
+    val currentSessionId: StateFlow<String?> = _currentSessionId
+
+    /** Stream of all persisted chat sessions, most-recently-updated first. */
+    fun sessions(): Flow<List<ChatSession>> = chatRepository.getSessions()
 
     var catalogModels: List<ModelDescriptor> = emptyList()
 
@@ -125,7 +136,7 @@ class ChatViewModel(
             contextLength = descriptor.contextLength,
         )
 
-        val result = withContext(Dispatchers.IO) {
+        val result = withContext(ioDispatcher) {
             engine.load(
                 modelHandle,
                 LoadConfig(
@@ -160,7 +171,25 @@ class ChatViewModel(
             generationConfig = currentGenerationConfig,
         )
         sessionManager = manager
-        manager.newSession(descriptor.id)
+
+        // Resume an existing session so history survives model loads/switches and
+        // process restarts. Only create a fresh session when there is nothing to resume.
+        val resumeId = _currentSessionId.value
+        when {
+            resumeId != null && chatRepository.getSession(resumeId) != null -> {
+                manager.switchSession(resumeId)
+            }
+            else -> {
+                val latest = chatRepository.getSessions().first().firstOrNull()
+                if (latest != null) {
+                    manager.switchSession(latest.id)
+                    _currentSessionId.value = latest.id
+                } else {
+                    val created = manager.newSession(descriptor.id)
+                    _currentSessionId.value = created.id
+                }
+            }
+        }
 
         // Forward assistant message updates
         scope.launch {
@@ -168,7 +197,7 @@ class ChatViewModel(
         }
 
         _uiState.value = ChatUiState.Ready(
-            messages = emptyList(),
+            messages = manager.currentSession.value?.messages ?: emptyList(),
             isGenerating = false,
         )
     }
@@ -192,6 +221,54 @@ class ChatViewModel(
 
     fun cancelGeneration() {
         sessionManager?.cancelGeneration()
+    }
+
+    /** Start a fresh conversation. Reuses the current session if it is already empty. */
+    fun newChat() {
+        val manager = sessionManager ?: return
+        val descriptor = _currentDescriptor.value ?: return
+        scope.launch {
+            cancelGeneration()
+            val current = manager.currentSession.value
+            if (current == null || current.messages.isNotEmpty()) {
+                val created = manager.newSession(descriptor.id)
+                _currentSessionId.value = created.id
+            }
+            _assistantMessage.value = ""
+            _uiState.value = ChatUiState.Ready(messages = emptyList(), isGenerating = false)
+        }
+    }
+
+    /** Open a previous conversation from history; its messages are restored on screen. */
+    fun openSession(id: String) {
+        val manager = sessionManager ?: return
+        scope.launch {
+            cancelGeneration()
+            manager.switchSession(id)
+            _currentSessionId.value = id
+            _assistantMessage.value = ""
+            _uiState.value = ChatUiState.Ready(
+                messages = manager.currentSession.value?.messages ?: emptyList(),
+                isGenerating = false,
+            )
+        }
+    }
+
+    fun deleteSession(id: String) {
+        scope.launch {
+            chatRepository.deleteSession(id)
+            if (_currentSessionId.value == id) {
+                // The active chat was deleted — start a fresh one.
+                val manager = sessionManager
+                val descriptor = _currentDescriptor.value
+                if (manager != null && descriptor != null) {
+                    val created = manager.newSession(descriptor.id)
+                    _currentSessionId.value = created.id
+                    _assistantMessage.value = ""
+                    _uiState.value = ChatUiState.Ready(messages = emptyList(), isGenerating = false)
+                }
+            }
+        }
     }
 
     fun retry() {

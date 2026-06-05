@@ -13,6 +13,7 @@ import dev.edgellm.engine.FakeInferenceEngine
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -75,6 +76,7 @@ class ChatViewModelTest {
             promptBuilder = promptBuilder,
             modelsDir = "/tmp/models",
             scope = scope.backgroundScope,
+            ioDispatcher = UnconfinedTestDispatcher(scope.testScheduler),
         )
         return Triple(vm, engine, downloader)
     }
@@ -338,5 +340,65 @@ class ChatViewModelTest {
             engine.lastPrompt.contains("pirate"),
             "Updated system prompt should be in next prompt, but lastPrompt was: '${engine.lastPrompt}'",
         )
+    }
+
+    @Test
+    fun `newChat starts an empty session and clears messages`() = runTest(UnconfinedTestDispatcher()) {
+        val (vm, _, _) = createViewModel(this, emits = listOf("reply"))
+        vm.loadModel(descriptor, "/tmp/models/falcon.gguf")
+        vm.sendMessage("hello")
+        advanceUntilIdle()
+
+        vm.newChat()
+        advanceUntilIdle()
+
+        val state = vm.uiState.value
+        assertTrue(state is ChatUiState.Ready)
+        assertTrue((state as ChatUiState.Ready).messages.isEmpty(), "New chat should have no messages")
+    }
+
+    @Test
+    fun `sessions flow exposes created sessions`() = runTest(UnconfinedTestDispatcher()) {
+        val (vm, _, _) = createViewModel(this, emits = listOf("reply"))
+        vm.loadModel(descriptor, "/tmp/models/falcon.gguf")
+        vm.sendMessage("hi")
+        advanceUntilIdle()
+
+        val sessions = vm.sessions().first()
+        assertTrue(sessions.isNotEmpty(), "Sessions flow should expose the active session")
+    }
+
+    @Test
+    fun `openSession loads that session's messages`() = runTest(UnconfinedTestDispatcher()) {
+        val (vm, _, _) = createViewModel(this, emits = listOf("reply"))
+        vm.loadModel(descriptor, "/tmp/models/falcon.gguf")
+        vm.sendMessage("first message")
+        advanceUntilIdle()
+        val firstSessionId = vm.currentSessionId.value!!
+
+        // Start a new chat (different session)
+        vm.newChat()
+        advanceUntilIdle()
+        assertTrue((vm.uiState.value as ChatUiState.Ready).messages.isEmpty())
+
+        // Reopen the first session — its messages come back
+        vm.openSession(firstSessionId)
+        advanceUntilIdle()
+        val reopened = vm.uiState.value as ChatUiState.Ready
+        assertTrue(reopened.messages.any { it.content == "first message" })
+    }
+
+    @Test
+    fun `deleteSession removes it from the sessions flow`() = runTest(UnconfinedTestDispatcher()) {
+        val (vm, _, _) = createViewModel(this, emits = listOf("reply"))
+        vm.loadModel(descriptor, "/tmp/models/falcon.gguf")
+        vm.sendMessage("hi")
+        advanceUntilIdle()
+        val id = vm.currentSessionId.value!!
+
+        vm.deleteSession(id)
+        advanceUntilIdle()
+
+        assertTrue(vm.sessions().first().none { it.id == id })
     }
 }

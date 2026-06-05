@@ -1,5 +1,6 @@
 package dev.edgellm
 
+import dev.edgellm.data.chat.InMemoryChatRepository
 import dev.edgellm.data.settings.GenerationSettings
 import dev.edgellm.data.settings.GenerationSettingsRepository
 import dev.edgellm.engine.FakeInferenceEngine
@@ -21,6 +22,7 @@ class AppDependenciesTest {
         engine = FakeInferenceEngine(),
         modelsDir = "/tmp/models",
         settingsRepository = FakeSettingsRepository(),
+        chatRepository = InMemoryChatRepository(),
     )
 
     @Test
