@@ -66,8 +66,22 @@ class ChatViewModel(
     private val _currentSessionId = MutableStateFlow<String?>(null)
     val currentSessionId: StateFlow<String?> = _currentSessionId
 
+    private val _downloadedModelIds = MutableStateFlow<Set<String>>(emptySet())
+    /** Ids of models whose .gguf file is present on disk. */
+    val downloadedModelIds: StateFlow<Set<String>> = _downloadedModelIds
+
     /** Stream of all persisted chat sessions, most-recently-updated first. */
     fun sessions(): Flow<List<ChatSession>> = chatRepository.getSessions()
+
+    /** Re-scan [modelsDir] for downloaded .gguf model files. */
+    fun refreshDownloadedModels() {
+        val dir = File(modelsDir)
+        _downloadedModelIds.value = dir.listFiles()
+            ?.filter { it.isFile && it.extension == "gguf" && it.length() > 0 }
+            ?.map { it.nameWithoutExtension }
+            ?.toSet()
+            ?: emptySet()
+    }
 
     var catalogModels: List<ModelDescriptor> = emptyList()
 
@@ -200,6 +214,7 @@ class ChatViewModel(
             messages = manager.currentSession.value?.messages ?: emptyList(),
             isGenerating = false,
         )
+        refreshDownloadedModels()
     }
 
     fun sendMessage(content: String) {

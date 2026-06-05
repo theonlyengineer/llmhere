@@ -13,8 +13,10 @@ import androidx.navigation.compose.rememberNavController
 import dev.edgellm.data.settings.GenerationSettings
 import dev.edgellm.ui.navigation.Screen
 import dev.edgellm.ui.screens.ChatScreen
+import dev.edgellm.ui.screens.HomeScreen
 import dev.edgellm.ui.screens.SettingsScreen
 import dev.edgellm.ui.theme.EdgeLlmTheme
+import dev.edgellm.viewmodel.ChatUiState
 import dev.edgellm.viewmodel.ChatViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -40,6 +42,8 @@ class MainActivity : ComponentActivity() {
             logger = { Log.i("EdgeLLM", it) },
         ).also { it.catalogModels = deps.catalogModels }
 
+        viewModel.refreshDownloadedModels()
+
         // Apply persisted settings to the view model on startup.
         val settingsFlow = MutableStateFlow(GenerationSettings())
         lifecycleScope.launch {
@@ -61,15 +65,39 @@ class MainActivity : ComponentActivity() {
                 val assistantMessage by viewModel.assistantMessage.collectAsState()
                 val currentModel by viewModel.currentDescriptor.collectAsState()
                 val currentSessionId by viewModel.currentSessionId.collectAsState()
-                val installedModels by deps.installedModelRepository.getInstalledModels()
-                    .collectAsState(initial = emptyList())
                 val sessions by viewModel.sessions().collectAsState(initial = emptyList())
+                val downloadedIds by viewModel.downloadedModelIds.collectAsState()
                 val settings by settingsFlow.collectAsState()
 
                 val defaultModel = deps.catalogModels.firstOrNull()
-                val downloadedIds = installedModels.map { it.descriptor.id }.toSet()
 
-                NavHost(navController = navController, startDestination = Screen.Chat.route) {
+                // Derive per-model status hints for the Home gallery.
+                val activeModelId = if (uiState is ChatUiState.Ready) currentModel?.id else null
+                val loadingModelId = if (uiState is ChatUiState.LoadingModel) currentModel?.id else null
+                val downloadingModelId = if (uiState is ChatUiState.Downloading) currentModel?.id else null
+                val downloadPercent = (uiState as? ChatUiState.Downloading)?.percent ?: 0f
+
+                NavHost(navController = navController, startDestination = Screen.Home.route) {
+                    composable(Screen.Home.route) {
+                        HomeScreen(
+                            models = deps.catalogModels,
+                            downloadedModelIds = downloadedIds,
+                            activeModelId = activeModelId,
+                            downloadingModelId = downloadingModelId,
+                            downloadPercent = downloadPercent,
+                            loadingModelId = loadingModelId,
+                            onDownload = { model ->
+                                viewModel.downloadModel(model)
+                                navController.navigate(Screen.Chat.route)
+                            },
+                            onRun = { model ->
+                                viewModel.switchModel(model)
+                                navController.navigate(Screen.Chat.route)
+                            },
+                            onChat = { navController.navigate(Screen.Chat.route) },
+                            onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                        )
+                    }
                     composable(Screen.Chat.route) {
                         ChatScreen(
                             uiState = uiState,
@@ -107,5 +135,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::viewModel.isInitialized) viewModel.refreshDownloadedModels()
     }
 }

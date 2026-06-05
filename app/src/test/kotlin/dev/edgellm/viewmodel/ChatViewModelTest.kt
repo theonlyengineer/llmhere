@@ -389,6 +389,36 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun `refreshDownloadedModels detects gguf files in models dir`() = runTest(UnconfinedTestDispatcher()) {
+        val tmpDir = createTempDir("edgellm-models")
+        java.io.File(tmpDir, "falcon-e-1b-instruct.gguf").apply { writeText("x") }
+        java.io.File(tmpDir, "other-model.gguf").apply { writeText("y") }
+        java.io.File(tmpDir, "notes.txt").apply { writeText("z") }
+        java.io.File(tmpDir, "empty.gguf").createNewFile() // zero bytes -> not counted
+
+        val engine = FakeInferenceEngine()
+        val vm = ChatViewModel(
+            engine = engine,
+            downloader = FakeModelDownloader(),
+            chatRepository = InMemoryChatRepository(),
+            installedModelRepository = InMemoryInstalledModelRepository(),
+            promptBuilder = PromptBuilder(ChatTemplateRegistry()),
+            modelsDir = tmpDir.absolutePath,
+            scope = backgroundScope,
+            ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+        )
+
+        vm.refreshDownloadedModels()
+        val ids = vm.downloadedModelIds.value
+
+        assertTrue(ids.contains("falcon-e-1b-instruct"))
+        assertTrue(ids.contains("other-model"))
+        assertTrue(!ids.contains("notes"))
+        assertTrue(!ids.contains("empty"))
+        tmpDir.deleteRecursively()
+    }
+
+    @Test
     fun `deleteSession removes it from the sessions flow`() = runTest(UnconfinedTestDispatcher()) {
         val (vm, _, _) = createViewModel(this, emits = listOf("reply"))
         vm.loadModel(descriptor, "/tmp/models/falcon.gguf")
