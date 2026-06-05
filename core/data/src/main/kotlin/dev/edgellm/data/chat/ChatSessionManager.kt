@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.onEach
 
-private const val MAX_HISTORY_TURNS = 0
+private const val DEFAULT_HISTORY_TURNS = 3
 
 class ChatSessionManager(
     private val chatRepository: ChatRepository,
@@ -22,9 +22,13 @@ class ChatSessionManager(
     private val contextLength: Int,
     private val stopTokens: List<String>,
     generationConfig: GenerationConfig = GenerationConfig(),
+    historyTurns: Int = DEFAULT_HISTORY_TURNS,
 ) {
     var systemPrompt: String? = systemPrompt
     var generationConfig: GenerationConfig = generationConfig
+
+    /** How many prior user/assistant turns to include as context (0 = stateless). */
+    var historyTurns: Int = historyTurns
 
     private val _currentSession = MutableStateFlow<ChatSession?>(null)
     val currentSession: StateFlow<ChatSession?> = _currentSession
@@ -56,9 +60,10 @@ class ChatSessionManager(
         val updatedSession = chatRepository.getSession(session.id) ?: return
         _currentSession.value = updatedSession
 
-        // Build prompt — limit to last MAX_HISTORY_TURNS to prevent context pollution
-        // from accumulated bad responses in long conversations.
-        val recentMessages = updatedSession.messages.takeLast(MAX_HISTORY_TURNS * 2 + 1)
+        // Build prompt — include the last [historyTurns] user/assistant pairs plus the
+        // current message so follow-ups ("continue", "and then?") have context, while
+        // capping history to avoid context pollution on small models.
+        val recentMessages = updatedSession.messages.takeLast(historyTurns * 2 + 1)
         val prompt = promptBuilder.build(
             family = family,
             messages = recentMessages,

@@ -24,6 +24,7 @@ class DataStoreGenerationSettingsRepository(context: Context) : GenerationSettin
         val maxTokens      = intPreferencesKey("max_tokens")
         val systemPrompt   = stringPreferencesKey("system_prompt")
         val thinkingEnabled = booleanPreferencesKey("thinking_enabled")
+        val historyTurns   = intPreferencesKey("history_turns")
     }
 
     private val defaults = GenerationSettings()
@@ -35,6 +36,7 @@ class DataStoreGenerationSettingsRepository(context: Context) : GenerationSettin
             maxTokens       = prefs[Keys.maxTokens]       ?: defaults.maxTokens,
             systemPrompt    = prefs[Keys.systemPrompt]    ?: defaults.systemPrompt,
             thinkingEnabled = prefs[Keys.thinkingEnabled] ?: defaults.thinkingEnabled,
+            historyTurns    = prefs[Keys.historyTurns]    ?: defaults.historyTurns,
         )
     }
 
@@ -45,6 +47,7 @@ class DataStoreGenerationSettingsRepository(context: Context) : GenerationSettin
             prefs[Keys.maxTokens]       = settings.maxTokens
             prefs[Keys.systemPrompt]    = settings.systemPrompt
             prefs[Keys.thinkingEnabled] = settings.thinkingEnabled
+            prefs[Keys.historyTurns]    = settings.historyTurns
         }
     }
 }

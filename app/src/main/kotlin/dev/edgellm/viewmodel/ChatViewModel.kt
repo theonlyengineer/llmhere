@@ -92,6 +92,7 @@ class ChatViewModel(
     private var currentSystemPrompt: String =
         "You are a helpful assistant. Answer questions clearly and concisely."
     private var currentGenerationConfig: GenerationConfig = GenerationConfig()
+    private var currentHistoryTurns: Int = 3
 
     fun downloadModel(descriptor: ModelDescriptor) {
         _currentDescriptor.value = descriptor
@@ -183,6 +184,7 @@ class ChatViewModel(
             contextLength = descriptor.contextLength,
             stopTokens = descriptor.stopTokens,
             generationConfig = currentGenerationConfig,
+            historyTurns = currentHistoryTurns,
         )
         sessionManager = manager
 
@@ -320,6 +322,7 @@ class ChatViewModel(
         temperature: Float = currentGenerationConfig.temperature,
         repeatPenalty: Float = currentGenerationConfig.repeatPenalty,
         maxTokens: Int = currentGenerationConfig.maxTokens,
+        historyTurns: Int = currentHistoryTurns,
     ) {
         currentSystemPrompt = systemPrompt
         currentGenerationConfig = GenerationConfig(
@@ -327,10 +330,12 @@ class ChatViewModel(
             repeatPenalty = repeatPenalty,
             maxTokens = maxTokens,
         )
+        currentHistoryTurns = historyTurns
         // Update settings in-place on the existing session manager (no session restart needed)
         sessionManager?.let { manager ->
             manager.systemPrompt = currentSystemPrompt
             manager.generationConfig = currentGenerationConfig
+            manager.historyTurns = currentHistoryTurns
         }
     }
 }

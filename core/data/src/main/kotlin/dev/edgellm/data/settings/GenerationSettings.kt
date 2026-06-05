@@ -6,4 +6,6 @@ data class GenerationSettings(
     val maxTokens: Int = 80,
     val systemPrompt: String = "You are a helpful assistant. Answer questions clearly and concisely.",
     val thinkingEnabled: Boolean = false,
+    /** Prior user/assistant turns kept as context (0 = stateless). */
+    val historyTurns: Int = 3,
 )

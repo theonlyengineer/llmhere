@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
                     temperature = settings.temperature,
                     repeatPenalty = settings.repeatPenalty,
                     maxTokens = settings.maxTokens,
+                    historyTurns = settings.historyTurns,
                 )
             }
         }

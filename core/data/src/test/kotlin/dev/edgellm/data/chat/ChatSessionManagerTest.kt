@@ -132,50 +132,64 @@ class ChatSessionManagerTest {
     }
 
     @Test
-    fun `prompt contains only the current message — no prior history`() = runTest {
+    fun `prompt includes prior turns so follow-ups have context`() = runTest {
         val (manager, engine) = createManager(emits = listOf("ok"))
         engine.load(ModelHandle(File("/fake.gguf"), "falcon-e", "i2_s", 2048), LoadConfig())
         manager.newSession("model")
+        manager.historyTurns = 3
 
-        // Send first message about medicine
+        engine.emits = listOf("Paris is the capital of France.")
+        manager.sendMessage("what is the capital of France?")
+
+        engine.emits = listOf("ok")
+        manager.sendMessage("continue")
+
+        val prompt = engine.lastPrompt
+        // The prior turn must be present so "continue" has something to continue.
+        assert(prompt.contains("capital of France")) {
+            "Prior turn should be in prompt for follow-ups, but prompt was:\n$prompt"
+        }
+        assert(prompt.contains("continue")) { "Current message must be in prompt" }
+    }
+
+    @Test
+    fun `historyTurns zero sends only the current message`() = runTest {
+        val (manager, engine) = createManager(emits = listOf("ok"))
+        engine.load(ModelHandle(File("/fake.gguf"), "falcon-e", "i2_s", 2048), LoadConfig())
+        manager.newSession("model")
+        manager.historyTurns = 0
+
         engine.emits = listOf("Modern medicine is a field...")
         manager.sendMessage("tell me about modern medicine")
 
-        // Second message about a completely different topic
         engine.emits = listOf("ok")
         manager.sendMessage("what is flutter?")
 
         val prompt = engine.lastPrompt
-        // Prior conversation should NOT be in the prompt
         assert(!prompt.contains("modern medicine")) {
-            "Prior turn should not be in prompt, but prompt was:\n$prompt"
+            "With historyTurns=0, prior turn should not be in prompt, but was:\n$prompt"
         }
-        assert(prompt.contains("flutter")) {
-            "Current question must be in prompt"
-        }
+        assert(prompt.contains("flutter")) { "Current question must be in prompt" }
     }
 
     @Test
-    fun `prompt includes at most last 2 turns when history is long`() = runTest {
+    fun `history is trimmed to the configured number of turns`() = runTest {
         val (manager, engine) = createManager(emits = listOf("ok"))
         engine.load(ModelHandle(File("/fake.gguf"), "falcon-e", "i2_s", 2048), LoadConfig())
         manager.newSession("model")
+        manager.historyTurns = 2
 
-        // Send 4 turns so history has 8 messages before the 5th question
         repeat(4) { i ->
             engine.emits = listOf("answer$i")
             manager.sendMessage("question$i")
         }
-
-        // 5th question — prompt should only contain last 2 user/assistant pairs + current
         engine.emits = listOf("answer4")
         manager.sendMessage("question4")
 
         val prompt = engine.lastPrompt
-        // "question0" and "question1" should not appear (older than last 2 pairs)
-        assert(!prompt.contains("question0")) { "Old history should be trimmed from prompt" }
-        assert(!prompt.contains("question1")) { "Old history should be trimmed from prompt" }
-        // "question4" (current) must appear
+        // Only the last 2 pairs + current should remain.
+        assert(!prompt.contains("question0")) { "Old history should be trimmed" }
+        assert(!prompt.contains("question1")) { "Old history should be trimmed" }
         assert(prompt.contains("question4")) { "Current question must be in prompt" }
     }
 

@@ -45,6 +45,7 @@ fun SettingsScreen(
     var temperature by remember { mutableFloatStateOf(settings.temperature) }
     var repeatPenalty by remember { mutableFloatStateOf(settings.repeatPenalty) }
     var maxTokens by remember { mutableFloatStateOf(settings.maxTokens.toFloat()) }
+    var historyTurns by remember { mutableFloatStateOf(settings.historyTurns.toFloat()) }
     var systemPrompt by remember { mutableStateOf(settings.systemPrompt) }
     var thinkingEnabled by remember { mutableStateOf(settings.thinkingEnabled) }
 
@@ -90,6 +91,13 @@ fun SettingsScreen(
                 range = 16f..512f,
                 onChange = { maxTokens = it },
             )
+            SliderSetting(
+                label = "Conversation memory",
+                value = historyTurns,
+                valueLabel = if (historyTurns.toInt() == 0) "Off" else "${historyTurns.toInt()} turns",
+                range = 0f..8f,
+                onChange = { historyTurns = it },
+            )
 
             if (showThinkingToggle) {
                 Spacer(Modifier.height(8.dp))
@@ -130,6 +138,7 @@ fun SettingsScreen(
                             maxTokens = maxTokens.toInt(),
                             systemPrompt = systemPrompt,
                             thinkingEnabled = thinkingEnabled,
+                            historyTurns = historyTurns.toInt(),
                         ),
                     )
                 },
