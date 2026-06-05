@@ -36,6 +36,8 @@ class ModelCatalog {
         @SerialName("chat_template") val chatTemplate: String? = null,
         @SerialName("stop_tokens") val stopTokens: List<String>? = null,
         val engine: String? = null,
+        @SerialName("supports_thinking") val supportsThinking: Boolean = false,
+        @SerialName("supports_vision") val supportsVision: Boolean = false,
     ) {
         fun toModelDescriptor(): ModelDescriptor? {
             return try {
@@ -53,6 +55,8 @@ class ModelCatalog {
                     chatTemplate = chatTemplate ?: return null,
                     stopTokens = stopTokens ?: return null,
                     engine = engine ?: return null,
+                    supportsThinking = supportsThinking,
+                    supportsVision = supportsVision,
                 )
             } catch (_: Exception) {
                 null

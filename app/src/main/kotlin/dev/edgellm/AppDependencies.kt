@@ -7,6 +7,7 @@ import dev.edgellm.data.download.OkHttpModelDownloader
 import dev.edgellm.data.model.InMemoryInstalledModelRepository
 import dev.edgellm.data.model.InstalledModelRepository
 import dev.edgellm.data.model.ModelCatalog
+import dev.edgellm.data.settings.GenerationSettingsRepository
 import dev.edgellm.domain.chat.PromptBuilder
 import dev.edgellm.domain.model.ModelDescriptor
 import dev.edgellm.domain.templates.ChatTemplateRegistry
@@ -17,6 +18,7 @@ import java.util.concurrent.TimeUnit
 class AppDependencies(
     val engine: InferenceEngine,
     val modelsDir: String,
+    val settingsRepository: GenerationSettingsRepository,
 ) {
     val chatTemplateRegistry = ChatTemplateRegistry()
     val promptBuilder = PromptBuilder(chatTemplateRegistry)

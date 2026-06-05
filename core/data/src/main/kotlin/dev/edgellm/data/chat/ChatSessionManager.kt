@@ -18,10 +18,13 @@ class ChatSessionManager(
     private val promptBuilder: PromptBuilder,
     private val engine: InferenceEngine,
     private val family: String,
-    private val systemPrompt: String?,
+    systemPrompt: String?,
     private val contextLength: Int,
     private val stopTokens: List<String>,
+    generationConfig: GenerationConfig = GenerationConfig(),
 ) {
+    var systemPrompt: String? = systemPrompt
+    var generationConfig: GenerationConfig = generationConfig
 
     private val _currentSession = MutableStateFlow<ChatSession?>(null)
     val currentSession: StateFlow<ChatSession?> = _currentSession
@@ -67,7 +70,7 @@ class ChatSessionManager(
         _assistantMessage.value = ""
         val responseBuilder = StringBuilder()
 
-        val config = GenerationConfig(stopTokens = stopTokens)
+        val config = generationConfig.copy(stopTokens = stopTokens)
         engine.generate(prompt, config).onEach { token ->
             responseBuilder.append(token.text)
             _assistantMessage.value = responseBuilder.toString()

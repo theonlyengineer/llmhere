@@ -1,6 +1,10 @@
 package dev.edgellm
 
+import dev.edgellm.data.settings.GenerationSettings
+import dev.edgellm.data.settings.GenerationSettingsRepository
 import dev.edgellm.engine.FakeInferenceEngine
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -8,9 +12,15 @@ import org.junit.jupiter.api.Test
 
 class AppDependenciesTest {
 
+    private class FakeSettingsRepository : GenerationSettingsRepository {
+        override fun getSettings(): Flow<GenerationSettings> = flowOf(GenerationSettings())
+        override suspend fun update(settings: GenerationSettings) {}
+    }
+
     private fun createDeps() = AppDependencies(
         engine = FakeInferenceEngine(),
         modelsDir = "/tmp/models",
+        settingsRepository = FakeSettingsRepository(),
     )
 
     @Test

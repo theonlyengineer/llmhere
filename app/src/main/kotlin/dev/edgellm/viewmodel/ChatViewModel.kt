@@ -8,6 +8,7 @@ import dev.edgellm.data.model.InstalledModelRepository
 import dev.edgellm.domain.chat.ChatMessage
 import dev.edgellm.domain.chat.PromptBuilder
 import dev.edgellm.domain.model.ModelDescriptor
+import dev.edgellm.engine.GenerationConfig
 import dev.edgellm.engine.InferenceEngine
 import dev.edgellm.engine.LoadConfig
 import dev.edgellm.engine.ModelHandle
@@ -54,13 +55,21 @@ class ChatViewModel(
     private val _assistantMessage = MutableStateFlow("")
     val assistantMessage: StateFlow<String> = _assistantMessage
 
+    private val _currentDescriptor = MutableStateFlow<ModelDescriptor?>(null)
+    val currentDescriptor: StateFlow<ModelDescriptor?> = _currentDescriptor
+
+    var catalogModels: List<ModelDescriptor> = emptyList()
+
     private var sessionManager: ChatSessionManager? = null
-    private var currentDescriptor: ModelDescriptor? = null
     private var downloadJob: Job? = null
     private var sendJob: Job? = null
 
+    private var currentSystemPrompt: String =
+        "You are a helpful assistant. Answer questions clearly and concisely."
+    private var currentGenerationConfig: GenerationConfig = GenerationConfig()
+
     fun downloadModel(descriptor: ModelDescriptor) {
-        currentDescriptor = descriptor
+        _currentDescriptor.value = descriptor
 
         // If the model file already exists on disk, skip download and load directly
         val existingFile = File(modelsDir, "${descriptor.id}.gguf")
@@ -104,7 +113,7 @@ class ChatViewModel(
 
     suspend fun loadModel(descriptor: ModelDescriptor, localPath: String) {
         _uiState.value = ChatUiState.LoadingModel
-        currentDescriptor = descriptor
+        _currentDescriptor.value = descriptor
 
         val file = File(localPath)
         logger("loadModel: path=$localPath exists=${file.exists()} size=${file.length()}")
@@ -145,9 +154,10 @@ class ChatViewModel(
             promptBuilder = promptBuilder,
             engine = engine,
             family = descriptor.family,
-            systemPrompt = "You are a helpful assistant. Answer questions clearly and concisely.",
+            systemPrompt = currentSystemPrompt,
             contextLength = descriptor.contextLength,
             stopTokens = descriptor.stopTokens,
+            generationConfig = currentGenerationConfig,
         )
         sessionManager = manager
         manager.newSession(descriptor.id)
@@ -185,7 +195,50 @@ class ChatViewModel(
     }
 
     fun retry() {
-        val descriptor = currentDescriptor ?: return
+        val descriptor = _currentDescriptor.value ?: return
         downloadModel(descriptor)
+    }
+
+    fun switchModel(descriptor: ModelDescriptor) {
+        cancelGeneration()
+        scope.launch {
+            engine.unload()
+            val localFile = File(modelsDir, "${descriptor.id}.gguf")
+            if (localFile.exists() && localFile.length() > 0) {
+                loadModel(descriptor, localFile.absolutePath)
+            } else {
+                downloadModel(descriptor)
+            }
+        }
+    }
+
+    fun restartModel() {
+        val descriptor = _currentDescriptor.value ?: return
+        val localFile = File(modelsDir, "${descriptor.id}.gguf")
+        if (!localFile.exists()) return
+        scope.launch {
+            cancelGeneration()
+            engine.unload()
+            loadModel(descriptor, localFile.absolutePath)
+        }
+    }
+
+    fun applySettings(
+        systemPrompt: String = currentSystemPrompt,
+        temperature: Float = currentGenerationConfig.temperature,
+        repeatPenalty: Float = currentGenerationConfig.repeatPenalty,
+        maxTokens: Int = currentGenerationConfig.maxTokens,
+    ) {
+        currentSystemPrompt = systemPrompt
+        currentGenerationConfig = GenerationConfig(
+            temperature = temperature,
+            repeatPenalty = repeatPenalty,
+            maxTokens = maxTokens,
+        )
+        // Update settings in-place on the existing session manager (no session restart needed)
+        sessionManager?.let { manager ->
+            manager.systemPrompt = currentSystemPrompt
+            manager.generationConfig = currentGenerationConfig
+        }
     }
 }

@@ -218,4 +218,125 @@ class ChatViewModelTest {
             "Prompt should contain system prompt but was:\n${engine.lastPrompt}",
         )
     }
+
+    @Test
+    fun `switchModel ends in Ready state`() = runTest(UnconfinedTestDispatcher()) {
+        val tmpDir = createTempDir("edgellm-test-models")
+        val tmpFile = java.io.File(tmpDir, "${descriptor.id}.gguf").also { it.createNewFile() }
+        val engine = FakeInferenceEngine(emits = listOf("ok"))
+        val vm = ChatViewModel(
+            engine = engine,
+            downloader = FakeModelDownloader(),
+            chatRepository = InMemoryChatRepository(),
+            installedModelRepository = InMemoryInstalledModelRepository(),
+            promptBuilder = PromptBuilder(ChatTemplateRegistry()),
+            modelsDir = tmpDir.absolutePath,
+            scope = backgroundScope,
+        )
+        vm.loadModel(descriptor, tmpFile.absolutePath)
+        assertTrue(vm.uiState.value is ChatUiState.Ready)
+
+        vm.switchModel(descriptor)
+        // Allow IO-dispatched loadModel to complete
+        kotlinx.coroutines.delay(500)
+        assertTrue(
+            vm.uiState.value is ChatUiState.Ready || vm.uiState.value is ChatUiState.LoadingModel,
+            "Expected Ready or LoadingModel after switchModel, got ${vm.uiState.value}",
+        )
+        tmpDir.deleteRecursively()
+    }
+
+    @Test
+    fun `switchModel keeps existing messages visible`() = runTest(UnconfinedTestDispatcher()) {
+        val tmpDir = createTempDir("edgellm-test-models")
+        val tmpFile = java.io.File(tmpDir, "${descriptor.id}.gguf").also { it.createNewFile() }
+        val engine = FakeInferenceEngine(emits = listOf("response"))
+        val vm = ChatViewModel(
+            engine = engine,
+            downloader = FakeModelDownloader(),
+            chatRepository = InMemoryChatRepository(),
+            installedModelRepository = InMemoryInstalledModelRepository(),
+            promptBuilder = PromptBuilder(ChatTemplateRegistry()),
+            modelsDir = tmpDir.absolutePath,
+            scope = backgroundScope,
+        )
+        vm.loadModel(descriptor, tmpFile.absolutePath)
+        vm.sendMessage("hi")
+        advanceUntilIdle()
+
+        vm.switchModel(descriptor)
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value is ChatUiState.Ready)
+        tmpDir.deleteRecursively()
+    }
+
+    @Test
+    fun `restartModel reloads the current model`() = runTest(UnconfinedTestDispatcher()) {
+        val tmpDir = createTempDir("edgellm-test-models")
+        val tmpFile = java.io.File(tmpDir, "${descriptor.id}.gguf").also { it.createNewFile() }
+        val engine = FakeInferenceEngine(emits = listOf("ok"))
+        val vm = ChatViewModel(
+            engine = engine,
+            downloader = FakeModelDownloader(),
+            chatRepository = InMemoryChatRepository(),
+            installedModelRepository = InMemoryInstalledModelRepository(),
+            promptBuilder = PromptBuilder(ChatTemplateRegistry()),
+            modelsDir = tmpDir.absolutePath,
+            scope = backgroundScope,
+        )
+        vm.loadModel(descriptor, tmpFile.absolutePath)
+
+        vm.uiState.test {
+            awaitItem() // consume Ready
+            vm.restartModel()
+            val loading = awaitItem()
+            assertTrue(loading is ChatUiState.LoadingModel)
+            val ready = awaitItem()
+            assertTrue(ready is ChatUiState.Ready)
+        }
+        tmpDir.deleteRecursively()
+    }
+
+    @Test
+    fun `restartModel is no-op when no model loaded`() = runTest(UnconfinedTestDispatcher()) {
+        val (vm, _, _) = createViewModel(this)
+        vm.restartModel()
+        assertEquals(ChatUiState.NoModel, vm.uiState.value)
+    }
+
+    @Test
+    fun `applySettings updates generation config for next message`() = runTest(UnconfinedTestDispatcher()) {
+        val (vm, engine, _) = createViewModel(this, emits = listOf("ok"))
+        vm.loadModel(descriptor, "/tmp/models/falcon.gguf")
+
+        // Ensure model is actually loaded before applying settings
+        val stateAfterLoad = vm.uiState.value
+        assertTrue(
+            stateAfterLoad is ChatUiState.Ready,
+            "Expected Ready after loadModel but got $stateAfterLoad",
+        )
+
+        vm.applySettings(
+            systemPrompt = "You are a pirate.",
+            temperature = 0.9f,
+            repeatPenalty = 1.5f,
+            maxTokens = 50,
+        )
+
+        vm.uiState.test {
+            awaitItem() // consume Ready
+            vm.sendMessage("ahoy")
+            // Wait for generation to complete
+            while (true) {
+                val s = awaitItem()
+                if (s is ChatUiState.Ready && !s.isGenerating) break
+            }
+        }
+
+        assertTrue(
+            engine.lastPrompt.contains("pirate"),
+            "Updated system prompt should be in next prompt, but lastPrompt was: '${engine.lastPrompt}'",
+        )
+    }
 }

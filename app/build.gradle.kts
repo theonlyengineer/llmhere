@@ -70,6 +70,11 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.okhttp)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.markdown.renderer.m3)
+    implementation(libs.markdown.renderer.code)
+    implementation(libs.coil.compose)
+    implementation(libs.androidx.datastore.preferences)
 
     testImplementation(libs.junit.jupiter.api)
     testRuntimeOnly(libs.junit.jupiter.engine)

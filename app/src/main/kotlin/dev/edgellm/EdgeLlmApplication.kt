@@ -1,6 +1,7 @@
 package dev.edgellm
 
 import android.app.Application
+import dev.edgellm.data.settings.DataStoreGenerationSettingsRepository
 import dev.edgellm.engine.llamacpp.LlamaCppEngine
 import dev.edgellm.engine.llamacpp.NativeBindingsImpl
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +22,7 @@ class EdgeLlmApplication : Application() {
         dependencies = AppDependencies(
             engine = engine,
             modelsDir = modelsDir,
+            settingsRepository = DataStoreGenerationSettingsRepository(this),
         )
 
         val catalogJson = assets.open("catalog.json").bufferedReader().readText()

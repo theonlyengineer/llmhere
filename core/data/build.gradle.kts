@@ -37,6 +37,7 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.okhttp)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.datastore.preferences)
 
     testImplementation(libs.junit.jupiter.api)
     testImplementation(libs.junit.jupiter.params)

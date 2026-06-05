@@ -14,4 +14,6 @@ data class ModelDescriptor(
     val chatTemplate: String,
     val stopTokens: List<String>,
     val engine: String,
+    val supportsThinking: Boolean = false,
+    val supportsVision: Boolean = false,
 )

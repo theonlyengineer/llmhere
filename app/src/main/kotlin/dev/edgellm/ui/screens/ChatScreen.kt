@@ -7,6 +7,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -27,11 +27,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -42,99 +44,74 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Outline
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.edgellm.domain.chat.ChatMessage
 import dev.edgellm.domain.chat.Role
+import dev.edgellm.domain.model.ModelDescriptor
+import dev.edgellm.ui.components.MarkdownMessageBubble
+import dev.edgellm.ui.components.MessageBubbleShape
+import dev.edgellm.ui.components.ModelSelectorBottomSheet
 import dev.edgellm.ui.theme.LocalChatColors
 import dev.edgellm.viewmodel.ChatUiState
-
-private val BubbleRadius = 20.dp
-private val HardCornerRadius = 4.dp
-
-/**
- * Bubble shape with a hard (small-radius) corner on the sender's side.
- * User messages get a hard corner at bottom-right; assistant at bottom-left.
- */
-private class MessageBubbleShape(private val isUser: Boolean) : Shape {
-    override fun createOutline(
-        size: Size,
-        layoutDirection: LayoutDirection,
-        density: Density,
-    ): Outline {
-        val r = with(density) { BubbleRadius.toPx() }
-        val sr = with(density) { HardCornerRadius.toPx() }
-        val w = size.width
-        val h = size.height
-
-        // Corner radii: top-left, top-right, bottom-right, bottom-left
-        val tl = r
-        val tr = r
-        val br = if (isUser) sr else r
-        val bl = if (isUser) r else sr
-
-        val path = Path().apply {
-            // Start at top-left after the radius
-            moveTo(tl, 0f)
-            lineTo(w - tr, 0f)
-            // Top-right corner
-            cubicTo(w, 0f, w, 0f, w, tr)
-            lineTo(w, h - br)
-            // Bottom-right corner
-            cubicTo(w, h, w, h, w - br, h)
-            lineTo(bl, h)
-            // Bottom-left corner
-            cubicTo(0f, h, 0f, h, 0f, h - bl)
-            lineTo(0f, tl)
-            // Top-left corner
-            cubicTo(0f, 0f, 0f, 0f, tl, 0f)
-            close()
-        }
-        return Outline.Generic(path)
-    }
-}
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     uiState: ChatUiState,
     assistantMessage: String,
+    currentModel: ModelDescriptor?,
+    catalogModels: List<ModelDescriptor>,
+    downloadedModelIds: Set<String>,
     onDownloadClick: () -> Unit,
     onSendMessage: (String) -> Unit,
     onCancelGeneration: () -> Unit,
     onRetry: () -> Unit,
+    onSelectModel: (ModelDescriptor) -> Unit,
+    onRestartModel: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
+    var showModelSelector by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = {
-                    Text(
-                        text = "EdgeLLM",
-                        style = MaterialTheme.typography.titleLarge,
+                    ModelChip(
+                        modelName = currentModel?.displayName ?: "EdgeLLM",
+                        onClick = { showModelSelector = true },
                     )
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(
             modifier = Modifier
@@ -150,10 +127,56 @@ fun ChatScreen(
                     assistantMessage = assistantMessage,
                     onSendMessage = onSendMessage,
                     onCancelGeneration = onCancelGeneration,
+                    onImageClick = {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Image support coming soon")
+                        }
+                    },
                 )
                 is ChatUiState.Error -> ErrorContent(uiState, onRetry)
             }
         }
+    }
+
+    if (showModelSelector) {
+        ModelSelectorBottomSheet(
+            currentModelId = currentModel?.id,
+            catalogModels = catalogModels,
+            downloadedModelIds = downloadedModelIds,
+            onSelectModel = onSelectModel,
+            onRestartModel = onRestartModel,
+            onDismiss = { showModelSelector = false },
+        )
+    }
+}
+
+@Composable
+private fun ModelChip(modelName: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = modelName,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium,
+        )
+        Icon(
+            Icons.Default.KeyboardArrowDown,
+            contentDescription = "Change model",
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
@@ -171,10 +194,7 @@ private fun NoModelContent(onDownloadClick: () -> Unit) {
             tint = MaterialTheme.colorScheme.primary,
         )
         Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = "No model installed",
-            style = MaterialTheme.typography.headlineSmall,
-        )
+        Text("No model installed", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "Download a model to start chatting",
@@ -189,11 +209,7 @@ private fun NoModelContent(onDownloadClick: () -> Unit) {
                 containerColor = LocalChatColors.current.sendButton,
             ),
         ) {
-            Icon(
-                imageVector = Icons.Default.Download,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
+            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text("Download & Try")
         }
@@ -225,10 +241,7 @@ private fun DownloadingContent(state: ChatUiState.Downloading) {
             tint = MaterialTheme.colorScheme.primary.copy(alpha = alpha),
         )
         Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = "Downloading model...",
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Text("Downloading model...", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(16.dp))
         LinearProgressIndicator(
             progress = { state.percent / 100f },
@@ -261,15 +274,9 @@ private fun LoadingModelContent() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        CircularProgressIndicator(
-            modifier = Modifier.size(48.dp),
-            strokeWidth = 4.dp,
-        )
+        CircularProgressIndicator(modifier = Modifier.size(48.dp), strokeWidth = 4.dp)
         Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = "Loading model...",
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Text("Loading model...", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "This may take a moment",
@@ -285,6 +292,7 @@ private fun ReadyContent(
     assistantMessage: String,
     onSendMessage: (String) -> Unit,
     onCancelGeneration: () -> Unit,
+    onImageClick: () -> Unit,
 ) {
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -303,12 +311,9 @@ private fun ReadyContent(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Empty state
         if (displayMessages.isEmpty() && !uiState.isGenerating) {
             Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -334,24 +339,17 @@ private fun ReadyContent(
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Top spacing
                 item { Spacer(modifier = Modifier.height(8.dp)) }
-
                 items(displayMessages) { message ->
-                    MessageBubble(message)
+                    MarkdownMessageBubble(message)
                 }
-
-                // Typing indicator
                 if (uiState.isGenerating && assistantMessage.isEmpty()) {
                     item { TypingIndicator() }
                 }
-
-                // Bottom spacing
                 item { Spacer(modifier = Modifier.height(4.dp)) }
             }
         }
 
-        // Input area
         ChatInputBar(
             inputText = inputText,
             onInputChange = { inputText = it },
@@ -363,6 +361,7 @@ private fun ReadyContent(
                 }
             },
             onCancel = onCancelGeneration,
+            onImageClick = onImageClick,
         )
     }
 }
@@ -374,6 +373,7 @@ private fun ChatInputBar(
     isGenerating: Boolean,
     onSend: () -> Unit,
     onCancel: () -> Unit,
+    onImageClick: () -> Unit,
 ) {
     val chatColors = LocalChatColors.current
 
@@ -383,15 +383,23 @@ private fun ChatInputBar(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
+        // Image attach placeholder (OCR phase)
+        IconButton(
+            onClick = onImageClick,
+            modifier = Modifier.size(48.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Image,
+                contentDescription = "Attach image",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         OutlinedTextField(
             value = inputText,
             onValueChange = onInputChange,
             modifier = Modifier.weight(1f),
             placeholder = {
-                Text(
-                    "Type a message...",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Text("Type a message...", style = MaterialTheme.typography.bodyMedium)
             },
             enabled = !isGenerating,
             shape = RoundedCornerShape(28.dp),
@@ -406,26 +414,18 @@ private fun ChatInputBar(
         if (isGenerating) {
             IconButton(
                 onClick = onCancel,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape),
+                modifier = Modifier.size(48.dp).clip(CircleShape),
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = MaterialTheme.colorScheme.errorContainer,
                     contentColor = MaterialTheme.colorScheme.onErrorContainer,
                 ),
             ) {
-                Icon(
-                    imageVector = Icons.Default.Stop,
-                    contentDescription = "Stop generating",
-                    modifier = Modifier.size(24.dp),
-                )
+                Icon(Icons.Default.Stop, contentDescription = "Stop generating", modifier = Modifier.size(24.dp))
             }
         } else {
             IconButton(
                 onClick = onSend,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape),
+                modifier = Modifier.size(48.dp).clip(CircleShape),
                 enabled = inputText.isNotBlank(),
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = chatColors.sendButton,
@@ -445,41 +445,6 @@ private fun ChatInputBar(
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessage) {
-    val isUser = message.role == Role.User
-    val chatColors = LocalChatColors.current
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
-    ) {
-        if (isUser) {
-            Spacer(modifier = Modifier.width(48.dp))
-        }
-
-        Box(
-            modifier = Modifier
-                .widthIn(max = 320.dp)
-                .background(
-                    color = if (isUser) chatColors.userBubble else chatColors.assistantBubble,
-                    shape = MessageBubbleShape(isUser),
-                )
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-        ) {
-            Text(
-                text = message.content,
-                color = if (isUser) chatColors.userBubbleText else chatColors.assistantBubbleText,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-
-        if (!isUser) {
-            Spacer(modifier = Modifier.width(48.dp))
-        }
-    }
-}
-
-@Composable
 private fun TypingIndicator() {
     val chatColors = LocalChatColors.current
     val infiniteTransition = rememberInfiniteTransition(label = "typing")
@@ -493,16 +458,10 @@ private fun TypingIndicator() {
         label = "dot-alpha",
     )
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Start,
-    ) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         Box(
             modifier = Modifier
-                .background(
-                    color = chatColors.assistantBubble,
-                    shape = MessageBubbleShape(isUser = false),
-                )
+                .background(color = chatColors.assistantBubble, shape = MessageBubbleShape(isUser = false))
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -513,9 +472,7 @@ private fun TypingIndicator() {
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(
-                                chatColors.assistantBubbleText.copy(alpha = alpha),
-                            ),
+                            .background(chatColors.assistantBubbleText.copy(alpha = alpha)),
                     )
                 }
             }
@@ -526,9 +483,7 @@ private fun TypingIndicator() {
 @Composable
 private fun ErrorContent(state: ChatUiState.Error, onRetry: () -> Unit) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
+        modifier = Modifier.fillMaxSize().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -558,15 +513,8 @@ private fun ErrorContent(state: ChatUiState.Error, onRetry: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(24.dp))
-        Button(
-            onClick = onRetry,
-            shape = RoundedCornerShape(24.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
+        Button(onClick = onRetry, shape = RoundedCornerShape(24.dp)) {
+            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text("Retry")
         }
