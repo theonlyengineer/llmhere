@@ -16,4 +16,8 @@ dependencyResolutionManagement {
     }
 }
 
+include(":app")
 include(":core:domain")
+include(":core:engine:api")
+include(":core:engine:llamacpp")
+include(":core:data")
