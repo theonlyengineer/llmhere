@@ -58,6 +58,8 @@ Full layered design: `docs/ARCHITECTURE.md`.
 
 ## Module layout
 
+
+
 ```
 edge-llm/
 ├── app/                         # Android app: UI, navigation, DI wiring
