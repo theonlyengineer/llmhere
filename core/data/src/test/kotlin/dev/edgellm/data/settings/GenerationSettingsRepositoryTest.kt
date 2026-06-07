@@ -15,7 +15,7 @@ class GenerationSettingsRepositoryTest {
             val s = awaitItem()
             assertEquals(0.3f, s.temperature)
             assertEquals(1.3f, s.repeatPenalty)
-            assertEquals(80, s.maxTokens)
+            assertEquals(512, s.maxTokens)
             assertEquals(false, s.thinkingEnabled)
         }
     }
