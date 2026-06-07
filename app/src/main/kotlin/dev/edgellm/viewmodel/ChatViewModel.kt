@@ -222,13 +222,22 @@ class ChatViewModel(
     fun sendMessage(content: String) {
         val manager = sessionManager ?: return
         sendJob = scope.launch {
-            _uiState.value = ChatUiState.Ready(
-                messages = manager.currentSession.value?.messages ?: emptyList(),
-                isGenerating = true,
-            )
+            // Reflect session changes into the UI as they happen, so the user's message
+            // shows up immediately (when it's appended) rather than only after the model
+            // finishes. The assistant's in-flight text streams separately via
+            // [assistantMessage]; here we keep the persisted message list live.
+            val reflectJob = launch {
+                manager.currentSession.collect { session ->
+                    _uiState.value = ChatUiState.Ready(
+                        messages = session?.messages ?: emptyList(),
+                        isGenerating = true,
+                    )
+                }
+            }
 
             manager.sendMessage(content)
 
+            reflectJob.cancel()
             _uiState.value = ChatUiState.Ready(
                 messages = manager.currentSession.value?.messages ?: emptyList(),
                 isGenerating = false,

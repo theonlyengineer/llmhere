@@ -57,6 +57,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -351,9 +352,28 @@ private fun ReadyContent(
         }
     }
 
-    LaunchedEffect(displayMessages.size, assistantMessage) {
+    // Whether the list is currently scrolled to (near) the bottom. Used to decide
+    // whether streaming output should keep following — if the user has scrolled up to
+    // read earlier content during generation, we must not yank them back down.
+    val atBottom by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()
+            last == null || last.index >= info.totalItemsCount - 1
+        }
+    }
+
+    // A new message (user send, or assistant turn appended) always scrolls to the end.
+    LaunchedEffect(displayMessages.size) {
         if (displayMessages.isNotEmpty()) {
             listState.animateScrollToItem(displayMessages.size - 1)
+        }
+    }
+
+    // Streaming tokens follow the bottom only when the user is already there.
+    LaunchedEffect(assistantMessage) {
+        if (atBottom && displayMessages.isNotEmpty()) {
+            listState.scrollToItem(displayMessages.size - 1)
         }
     }
 
