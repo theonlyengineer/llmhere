@@ -206,6 +206,12 @@ Java_dev_edgellm_engine_llamacpp_NativeBindingsImpl_startGeneration(
     }
     llama_sampler_chain_add(engine->sampler, llama_sampler_init_dist(42));
 
+    // Clear the KV cache so each generation starts from a clean context. The full
+    // prompt (including any prior turns the session chose to include) is decoded
+    // fresh below. Without this, the previous conversation's tokens remain resident
+    // in the context and a new chat would continue the old one.
+    llama_memory_clear(llama_get_memory(engine->ctx), true);
+
     // Decode prompt
     llama_batch batch = llama_batch_get_one(
         engine->prompt_tokens.data(), engine->prompt_tokens.size());

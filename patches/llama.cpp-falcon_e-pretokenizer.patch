@@ -1,0 +1,42 @@
+diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
+index 9a4bed494..7c6dc6ed6 100644
+--- a/src/llama-vocab.cpp
++++ b/src/llama-vocab.cpp
+@@ -346,6 +346,15 @@ struct llm_tokenizer_bpe : llm_tokenizer {
+                     "[0-9][0-9][0-9]",
+                 };
+                 break;
++            case LLAMA_VOCAB_PRE_TYPE_FALCON_E:
++                // Falcon-E (Falcon-Edge / BitNet): same as Falcon but splits digits
++                // individually ("[0-9]") rather than in groups of three.
++                regex_exprs = {
++                    "[\\p{P}\\$\\+<=>\\^~\\|`]+",
++                    "'s|'t|'re|'ve|'m|'ll|'d| ?\\p{L}+| ?\\p{N}+| ?[^\\s\\p{L}\\p{N}]+|\\s+(?!\\S)",
++                    "[0-9]",
++                };
++                break;
+             case LLAMA_VOCAB_PRE_TYPE_STARCODER:
+             case LLAMA_VOCAB_PRE_TYPE_REFACT:
+             case LLAMA_VOCAB_PRE_TYPE_COMMAND_R:
+@@ -2132,6 +2141,9 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
+             } else if (
+                     tokenizer_pre == "falcon") {
+                 pre_type = LLAMA_VOCAB_PRE_TYPE_FALCON;
++            } else if (
++                    tokenizer_pre == "falcon_e") {
++                pre_type = LLAMA_VOCAB_PRE_TYPE_FALCON_E;
+             } else if (
+                     tokenizer_pre == "mpt") {
+                 pre_type = LLAMA_VOCAB_PRE_TYPE_MPT;
+diff --git a/src/llama-vocab.h b/src/llama-vocab.h
+index 2626ae36e..e15e75f9c 100644
+--- a/src/llama-vocab.h
++++ b/src/llama-vocab.h
+@@ -64,6 +64,7 @@ enum llama_vocab_pre_type {
+     LLAMA_VOCAB_PRE_TYPE_WHITESPACE        = 53,
+     LLAMA_VOCAB_PRE_TYPE_GRANITE_EMB_MULTI = 54,
+     LLAMA_VOCAB_PRE_TYPE_MELLUM2           = 55,
++    LLAMA_VOCAB_PRE_TYPE_FALCON_E          = 56,
+ };
+ 
+ struct LLM_KV;
